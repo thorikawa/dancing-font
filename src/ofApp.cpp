@@ -1,26 +1,85 @@
 #include "ofApp.h"
 
 //--------------------------------------------------------------
-void ofApp::setup(){    
-    testFont.loadFont("GenShinGothic-Monospace-Regular.ttf", 18, false, true);
+void ofApp::setup(){
+    ofSetFrameRate(60);
+    ofBackground(0, 0, 0);
     
+    testFont.loadFont("GenShinGothic-Monospace-Regular.ttf", 64, false, true);
     
     sources.push_back(str);
     sources.push_back(str2);
     sources.push_back(str3);
 
-    paths = testFont.getStringAsPoints(str, 0, 0, 1104);
-    paths2 = testFont.getStringAsPoints(str2, 0, 0, 1104);
-//    paths = testFont.getStringAsPoints(str);
-//    paths2 = testFont.getStringAsPoints(str2);
-    for (int i = 0; i<paths.size(); i++) {
-        seeds.push_back(ofRandom(100.0));
+    paths = testFont.getStringAsPoints(str, 0, 64, 600);
+    paths2 = testFont.getStringAsPoints(str2, 0, 0, 600);
+    
+    for (int i = 0; i < 40000; i++){
+        particle myParticle;
+        myParticle.setInitialCondition
+        (ofRandom(0,ofGetWidth()),ofRandom(0,ofGetHeight()),0,0);
+        particles.push_back(myParticle);
     }
+    VF.setupField(paths, 600, 400, ofGetWidth(), ofGetHeight());
+    addMode = 0;
 }
 
 //--------------------------------------------------------------
 void ofApp::update(){
-
+    if (addMode == 0) {
+        return;
+    }
+    for (int i = 0; i < particles.size(); i++){
+        
+        //particleの力をリセット
+        particles[i].resetForce();
+        
+        //ベクトル場から、それぞれのparticleにかかる力を算出
+        ofVec2f frc;
+        frc = VF.getForceFromPos(particles[i].pos.x, particles[i].pos.y);
+        
+        //Particleの状態を更新
+        particles[i].addForce(frc.x, frc.y);
+        particles[i].addDampingForce();
+        particles[i].bounceOffWalls();
+        particles[i].update();
+    }
+    
+    //ベクトル場の力の減衰
+    //VF.fadeField(0.998f);
+    for (int i = 0; i < particles.size(); i++){
+        
+        //particleの力をリセット
+        particles[i].resetForce();
+        
+        //ベクトル場から、それぞれのparticleにかかる力を算出
+        ofVec2f frc;
+        frc = VF.getForceFromPos(particles[i].pos.x, particles[i].pos.y);
+        
+        //Particleの状態を更新
+        particles[i].addForce(frc.x, frc.y);
+        particles[i].addDampingForce();
+        particles[i].bounceOffWalls();
+        particles[i].update();
+    }
+    
+    //ベクトル場の力の減衰
+//    VF.fadeField(cos(ofGetElapsedTimef() * 3.0f) * 2.0);
+    
+    
+    for (int i = 0; i<50; i++) {
+        vector<ofPolyline> polylines = paths[i].getOutline();
+        for(int k = 0; k < polylines.size(); k++) {
+            vector<ofPoint> vs = polylines[k].getVertices();
+            for(int j = 1; j < vs.size(); j++) {
+                ofPoint p = vs[j];
+                float r = ofRandomf();
+                if (r > 0.96) {
+                    VF.addInwardCircle(p.x, p.y, 6, 0.6 * (1 + cos(ofGetElapsedTimef())));
+                }
+            }
+        }
+    }
 }
 
 void inflate(vector<ofPoint>& points, int target) {
@@ -49,90 +108,46 @@ void inflate(vector<ofPoint>& points, int target) {
 
 //--------------------------------------------------------------
 void ofApp::draw(){
-    // we can also access the individual points
-    ofSetColor(0, 90, 60);
-//    ofNoFill();
-    ofNoFill();
-    ofTranslate(10, 40, 0);
-    float t = ofGetElapsedTimef() - startTime;
-    
-    int count = 0;
-    ofPushMatrix();
-    for (int i1 = 0, i2 = 0; i1 < 1000 && i2 < 1000; i1++, i2++) {
-        ofBeginShape();
-        vector<ofPolyline> polylines = paths[i1].getOutline();
-        vector<ofPolyline> polylines2 = paths2[i2].getOutline();
-        while (polylines.size() == 0) {
-            printf("polylines of %d is empty\n", i1);
-            i1++;
-            polylines = paths[i1].getOutline();
-        }
-        while (polylines2.size() == 0) {
-            printf("polylines of %d is empty\n", i2);
-            i2++;
-            polylines2 = paths2[i2].getOutline();
-        }
-        int nline = max(polylines.size(), polylines2.size());
-        for(int k = 0; k < nline; k++){
-            if( k!= 0)ofNextContour(true) ;
+    //現在のモードを画面に表示
+    string msg;
+    switch (addMode) {
             
-            vector<ofPoint> vs;
-            vector<ofPoint> vs2;
+        case 1:
+            msg = "mode : Outward";
+            break;
             
-            if (polylines.size() < k + 1) {
-                ofPoint p = polylines[0].getVertices()[0];
-                vs.push_back(ofPoint(p.x, p.y));
-                vs.push_back(ofPoint(p.x, p.y));
-            } else {
-                vs = polylines[k].getVertices();
-            }
-            if (polylines2.size() < k + 1) {
-                ofPoint p = polylines2[0].getVertices()[0];
-                vs2.push_back(ofPoint(p.x, p.y));
-                vs2.push_back(ofPoint(p.x, p.y));
-            } else {
-                vs2 = polylines2[k].getVertices();
-            }
-            if (vs.size() < vs2.size()) {
-                // increase the number of vs
-                inflate(vs, vs2.size());
-            } else if (vs.size() > vs2.size()) {
-                inflate(vs2, vs.size());
-            }
-            int nvertex = max(vs.size(), vs2.size());
-            for(int j = 0; j < nvertex; j++){
-                float x, y, dx, dy;
-                float wave = 0.0;
-                if (vs.size() < j + 1) {
-                    x = vs[0].x + sin(k + 0 + t * 20.0f) * wave;
-                    y = vs[0].y;
-                } else {
-                    x = vs[j].x + sin(k + j + t * 20.0f) * wave;
-                    y = vs[j].y;
-                }
-                
-                if (vs2.size() < j + 1) {
-                    dx = vs2[0].x;
-                    dy = vs2[0].y;
-                } else {
-                    dx = vs2[j].x;
-                    dy = vs2[j].y;
-                }
-//                float r = 1.0 - 1.0 / (1.0 + exp(-t / 20.0));
-                float r = t / duration;
-                if (r > 1.0f) {
-                    r = 1.0f;
-                }
-                x = (1 - r) * x + r * dx;
-                y = (1 - r) * y + r * dy;
-                ofVertex(x, y);
-                
-                count++;
-            }
-        }
-        ofEndShape(true);
+        case 2:
+            msg = "mode : Inward";
+            break;
+            
+        case 3:
+            msg = "mode : Clockwise";
+            break;
+            
+        case 4:
+            msg = "mode : Counter Clockwise";
+            break;
+            
+        default:
+            break;
     }
-    ofPopMatrix();
+    ofSetColor(255, 255, 255);
+//    ofDrawBitmapString("key 1 - 4 : change vector mode", 20, 20);
+//    ofDrawBitmapString(msg, 20, 40);
+    
+    ofEnableBlendMode(OF_BLENDMODE_ADD);
+    
+    //ベクトル場を描画
+    ofSetColor(0,130,130, 127);
+    VF.draw();
+    
+    //ベクトル場に配置されたparticleを描画
+    ofSetColor(0, 127, 255)	;
+    for (int i = 0; i < particles.size(); i++){
+        particles[i].draw();
+    }	
+    
+    ofDisableBlendMode();
 }
 
 //--------------------------------------------------------------
@@ -143,6 +158,38 @@ void ofApp::keyPressed(int key){
         dest = (dest + 1) % 3;
         paths = testFont.getStringAsPoints(sources[dest], 0, 0, 1104);
         paths2 = testFont.getStringAsPoints(sources[(dest + 1) % 3], 0, 0, 1104);
+    }
+
+    // 1 - 4のキーでベクトル場のモードを変更
+    switch (key) {
+        case '1':
+            //外向き
+            addMode = 1;
+            break;
+            
+        case '2':
+            //内向き
+            addMode = 2;
+            break;
+            
+        case '3':
+            //時計回り
+            addMode = 3;
+            break;
+            
+        case '4':
+            //反時計回り
+            addMode = 4;
+            break;
+            
+        case ' ':
+            //パーティクルの場所を初期化
+            for (int i = 0; i < particles.size(); i++){
+                particles[i].setInitialCondition(ofRandom(0,ofGetWidth()),ofRandom(0,ofGetHeight()),0,0);
+            }
+            
+        default:
+            break;
     }
 }
 
@@ -158,7 +205,31 @@ void ofApp::mouseMoved(int x, int y ){
 
 //--------------------------------------------------------------
 void ofApp::mouseDragged(int x, int y, int button){
-
+    //モードに応じてベクトル場に力を加える
+    switch (addMode) {
+        case 1:
+            //外向き
+            VF.addOutwardCircle(x,y, 100, 0.2);
+            break;
+            
+        case 2:
+            //内向き
+            VF.addInwardCircle(x,y, 100, 0.2);
+            break;
+            
+        case 3:
+            //時計回り
+            VF.addClockwiseCircle(x, y, 100, 0.2);
+            break;
+            
+        case 4:
+            //反時計回り
+            VF.addCounterClockwiseCircle(x, y, 100, 0.2);
+            break;
+            
+        default:
+            break;
+    }
 }
 
 //--------------------------------------------------------------
@@ -167,12 +238,12 @@ void ofApp::mousePressed(int x, int y, int button){
 
 //--------------------------------------------------------------
 void ofApp::mouseReleased(int x, int y, int button){
-
+    
 }
 
 //--------------------------------------------------------------
 void ofApp::mouseEntered(int x, int y){
-
+    
 }
 
 //--------------------------------------------------------------
